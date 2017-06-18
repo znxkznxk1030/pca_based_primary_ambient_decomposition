@@ -53,7 +53,7 @@ else:
 # synthesize noise
 
 noise = noise[:lenSource, :]
-# source2 = synthesize(source2, noise)
+source2 = synthesize(source2, noise)
 
 # create stereo window function
 # - hanning function (nfft : 4096, N : 2048)
@@ -86,32 +86,35 @@ lamb = 0.8
 
 xp = zeros((N, 2))
 
-xout_pre = zeros((N))
-
-XL = zeros((N, 2))
-XR = zeros((N, 2))
+xout_pre = zeros(N)
+XL = zeros((N, 1))
+XR = zeros((N, 1))
 
 psd = ones((2, 2, N)) * init
 
-Sest = zeros((N))
+Sest = zeros(N)
 Nlest = zeros((N, 1))
 Nrest = zeros((N, 1))
 
-OutVec = empty((0))
+OutVec = empty(0)
 
 for i in range(frame):
     subSignal = source2[i * N: (i + 1) * N, :]
     print(i)
-    XV = fftpack.rfft(np.vstack((xp, subSignal)) * hanning2)
+    XVL = fftpack.rfft(subSignal[:, 0])
+    XVR = fftpack.rfft(subSignal[:, 1])
     # TV = fftpack.rfft(subSignal)
     # print(shape(np.vstack((xp, subSignal))))
     xp = subSignal
 
-    XL = np.transpose(np.vstack((XV[:N, 0], XL[:, 0])))
-    XR = np.transpose(np.vstack((XV[:N, 1], XR[:, 0])))
+    # XL = np.transpose(np.vstack((XV[:N, 0], XL[:, 0])))
+    # XR = np.transpose(np.vstack((XV[:N, 1], XR[:, 0])))
+
+    # XL = np.transpose(XV[:N, 0])
+    # XR = np.transpose(XV[:N, 1])
 
     for k in range(N):
-        subIn = vstack((XV[k, 0], XV[k, 1]))
+        subIn = vstack((XVL[k], XVR[k]))
         currP = dot(subIn.transpose(), subIn)
         # print(currP)
 
@@ -134,25 +137,26 @@ for i in range(frame):
         # print(Cpsd[0, 1], Cpsd[0, 0] + Cpsd[1, 1], inside_root)
 
         # estimate primary source
-
-        Sest[k] = pan[0] * XV[k, 0] + pan[1] * XV[k, 1]
+        # Sest[k] = (XVL[k] + XVR[k]) / 2
+        Sest[k] = pan[0] * XVL[k] + pan[1] * XVR[k]
         scaling = sqrt((max_eig - min_eig) / (min_eig + init))
         Sest[k] = Sest[k] * scaling
 
         # estimate ambient source
-        Nlest[k] = XV[k, 0] - (1 - sqrt(min_eig / (max_eig + init))
-                               * Sest[k] * pan[0])
-        Nrest[k] = XV[k, 1] - (1 - sqrt(min_eig / (max_eig + init))
-                               * Sest[k] * pan[1])
+
+        Nlest[k] = XVL[k] - (1 - sqrt(min_eig / (max_eig + init))
+                             * Sest[k] * pan[0])
+        Nrest[k] = XVR[k] - (1 - sqrt(min_eig / (max_eig + init))
+                             * Sest[k] * pan[1])
 
     # ifft
     # print(shape(XV[:N, 0]))
-    ConjVec = np.append(XV[:N, 0], XV[N-1::-1, 0])
+    ConjVec = np.append(XVL[:N], XVL[N - 1::-1])
     # ConjVec = np.append(Sest, Sest[::-1])
 
     # print(shape(ConjVec))
 
-    xout = fftpack.irfft(ConjVec) * append(hanning(N), hanning(N))
+    xout = fftpack.irfft(Sest)
     # print(shape(xout), shape(xout_pre))
     # print(shape(Sest[::-1]))
 
@@ -160,18 +164,19 @@ for i in range(frame):
     # print(shape(xout))
     # xout = xout.transpose()
 
-    out = xout_pre + xout[:N]
-    xout_pre = xout[N:]
-    OutVec = append(OutVec, out)
+    # out = xout_pre + xout[:N]
+    # xout_pre = xout[N:]
+
+    OutVec = append(OutVec, xout)
     # print(OutVec)
 
 print('process end : copy start')
 ext_primary = OutVec[N + 1:]
 print(ext_primary)
 output = wave.open(output_path, 'w')
-output.setparams((1, sampWidth, FrameRate, nFrames, 'NONE', 'not compressed'))
+output.setparams((2, sampWidth, FrameRate, nFrames, 'NONE', 'not compressed'))
 
-copyWav(output, ext_primary)
+copyWav2(output, source2)
 
 input.close()
 output.close()
