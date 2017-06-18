@@ -1,109 +1,177 @@
 from numpy import *
-from scipy import fftpack
+from scipy import fftpack, signal
 
 from utility.sound_util import *
 from utility.plotly_util import showSignalFFT
 
-# fs, Input = wavfile.read(file_DIR + 'output.wav')
-input = wave.open(file_DIR + 'saw.wav', 'r')
+file_type = '.wav'
+
+# path of files (.wav)
+
+input_name = 'Fe_sp_1'
+output_name = 'primary_output'
+hl_name = 'L0e' + '00' + '0a'
+hr_name = 'R0e' + '00' + '0a'
+noi_name = 'W2'
+
+input_path = file_DIR + input_name + '.wav'
+output_path = file_DIR + output_name + '.wav'
+hl_path = file_DIR + hl_name + '.wav'
+hr_path = file_DIR + hr_name + '.wav'
+noi_path = file_DIR + noi_name + '.wav'
+
+# open source file and get params
+
+input = wave.open(input_path)
 nChannels = input.getnchannels()
 FrameRate = input.getframerate()
 sampWidth = input.getsampwidth()  # sampling width
 nFrames = input.getnframes()
-print(nChannels)
+
+# open impulse file and change str
+
+hl = wav2str(wave.open(hl_path, 'r'))
+hr = wav2str(wave.open(hr_path, 'r'))
+noise = wav2str(wave.open(noi_path, 'r'))
+
+# check sound channel
 
 if nChannels == 2:
-    _Input = stereo2mono(stereo2str(input))
-    nChannels = 1
+    source = wav2str(input)
+    source = stereo2mono(source)
 else:
-    _Input = wav2str(input)
+    source = wav2str(input)
+    lenSource = len(source)
+    source2 = np.transpose(np.vstack((signal.lfilter(hl, [1.], source) / np.max(np.abs(hl)),
+                                      signal.lfilter(hr, [1.], source) / np.max(np.abs(hr))
+                                      )))
 
-# generate window function
+# generate noise
 
-N = 4096
-sWin = zeros((N, 2))
-sWin[:, 0] = hanning(N)
-sWin[:, 1] = hanning(N)
+# noi = np.random.uniform(low=1, high=2, size=(len_source, 2))
 
-# parameters
+# synthesize noise
 
-_nFrame = int(nFrames / N)
-n = int(len(_Input) / nChannels)
+noise = noise[:lenSource, :]
+# source2 = synthesize(source2, noise)
+
+# create stereo window function
+# - hanning function (nfft : 4096, N : 2048)
+
+nfft = 516
+N = int(nfft / 2)
+
+hanning2 = zeros((N, 2))
+hanning2[:, 0] = hanning(N)
+hanning2[:, 1] = hanning(N)
+
+hanning1 = hanning2
+
+hanning2 = np.vstack((hanning2, hanning2))
+
+# define frequency parameters
+
+n = int(len(source) / nChannels)
 k = np.arange(n)
 T = n / FrameRate
 frq = k / T
 frq = frq[range(int(n / 2))]
 
-han_stereo = zeros((N, 2))
-han_stereo[:, 0] = hanning(N)
-han_stereo[:, 1] = hanning(N)
+# define parameters
 
-X = np.array([])
-Y = np.array([])
+frame = int(lenSource / N)
 
-_X = np.array([])
-_Y = np.array([])
+init = 1.e-4
+lamb = 0.8
 
-for i in range(_nFrame):
-    if nChannels == 2:
-        _subSignal = _Input[i * N: (i + 1) * N, :]
-        _subSignal = _subSignal * han_stereo
-    else:
-        _subSignal = _Input[i * N: (i + 1) * N]
-        _subSignal = _subSignal * hanning(N)
+xp = zeros((N, 2))
 
-    _subFFT = fftpack.fft(_subSignal)
+xout_pre = zeros((N))
 
-    Y = np.append(Y, _subFFT)
-    X = np.append(X, _subSignal)
+XL = zeros((N, 2))
+XR = zeros((N, 2))
 
-    f_signal = fftpack.rfft(_subSignal)
-    W = fftpack.fftfreq(_subSignal.size, d=FrameRate)
-    cut_f_signal = f_signal
+psd = ones((2, 2, N)) * init
 
-    _threshold = 2
+Sest = zeros((N))
+Nlest = zeros((N, 1))
+Nrest = zeros((N, 1))
 
-    for k in range(len(f_signal)):
-        if W[k] > _threshold:
-            cut_f_signal[k] = 0
-        else:
-            cut_f_signal[k] = f_signal[k]
+OutVec = empty((0))
 
-    _X = np.append(_X, np.fft.irfft(cut_f_signal))
-    _Y = np.append(_Y, cut_f_signal)
+for i in range(frame):
+    subSignal = source2[i * N: (i + 1) * N, :]
+    print(i)
+    XV = fftpack.rfft(np.vstack((xp, subSignal)) * hanning2)
+    # TV = fftpack.rfft(subSignal)
+    # print(shape(np.vstack((xp, subSignal))))
+    xp = subSignal
 
-Y_ = fftpack.fft(X)  # fft computing and normalization
+    XL = np.transpose(np.vstack((XV[:N, 0], XL[:, 0])))
+    XR = np.transpose(np.vstack((XV[:N, 1], XR[:, 0])))
 
-W = fftpack.fftfreq(int(Y_.size / nChannels), d=FrameRate)
+    for k in range(N):
+        subIn = vstack((XV[k, 0], XV[k, 1]))
+        currP = dot(subIn.transpose(), subIn)
+        # print(currP)
 
-print(len(Y_), len(W))
+        psd[:, :, k] = psd[:, :, k] * lamb + (1 + lamb) * currP
+        Cpsd = psd[:, :, k]
 
-Y_ = Y_[range(int(n / 2))]
+        # compute eigenvalue & eigenvector
 
-signal_ = fftpack.rfft(_Input)
-W_ = fftpack.fftfreq(_Input.size, FrameRate)
+        eigVal, eigVec = np.linalg.eig(Cpsd)
+        # print(eigVal, eigVec)
+        pan = eigVec[:, 1]
 
-threshold = 10000
+        # get min,max eigenvalue
 
-cut_freq_signal_ = signal_
+        inside_root = sqrt(pow(abs(Cpsd[0, 0] - Cpsd[1, 1]), 2)
+                           + pow(abs(Cpsd[0, 1]), 2) * 4)
+        min_eig = (Cpsd[0, 0] + Cpsd[1, 1] - inside_root) / 2
+        max_eig = (Cpsd[0, 0] + Cpsd[1, 1] + inside_root) / 2
 
-for i in range(len(cut_freq_signal_)):
-    if i < threshold:
-        cut_freq_signal_[i] = 0
+        # print(Cpsd[0, 1], Cpsd[0, 0] + Cpsd[1, 1], inside_root)
 
+        # estimate primary source
 
-cut_signal_ = fftpack.irfft(cut_freq_signal_)
+        Sest[k] = pan[0] * XV[k, 0] + pan[1] * XV[k, 1]
+        scaling = sqrt((max_eig - min_eig) / (min_eig + init))
+        Sest[k] = Sest[k] * scaling
 
-cut_freq_signal_ = cut_freq_signal_[range(int(n/2))]
-_Y = _Y[range(int(n / 2))]
+        # estimate ambient source
+        Nlest[k] = XV[k, 0] - (1 - sqrt(min_eig / (max_eig + init))
+                               * Sest[k] * pan[0])
+        Nrest[k] = XV[k, 1] - (1 - sqrt(min_eig / (max_eig + init))
+                               * Sest[k] * pan[1])
 
-Y = Y[range(int(n / 2))]
+    # ifft
+    # print(shape(XV[:N, 0]))
+    ConjVec = np.append(XV[:N, 0], XV[N-1::-1, 0])
+    # ConjVec = np.append(Sest, Sest[::-1])
+
+    # print(shape(ConjVec))
+
+    xout = fftpack.irfft(ConjVec) * append(hanning(N), hanning(N))
+    # print(shape(xout), shape(xout_pre))
+    # print(shape(Sest[::-1]))
+
+    # xout = fftpack.irfft(TV)
+    # print(shape(xout))
+    # xout = xout.transpose()
+
+    out = xout_pre + xout[:N]
+    xout_pre = xout[N:]
+    OutVec = append(OutVec, out)
+    # print(OutVec)
+
+print('process end : copy start')
+ext_primary = OutVec[N + 1:]
+print(ext_primary)
+output = wave.open(output_path, 'w')
+output.setparams((1, sampWidth, FrameRate, nFrames, 'NONE', 'not compressed'))
+
+copyWav(output, ext_primary)
 
 input.close()
-
-output = wave.open(file_DIR + 'saw_cutoff_frequency.wav', 'w')
-output.setparams((nChannels, sampWidth, FrameRate, nFrames, 'NONE', 'not compressed'))
-
-copyWav(output, cut_signal_)
-
 output.close()
