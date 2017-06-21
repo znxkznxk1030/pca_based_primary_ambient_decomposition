@@ -36,6 +36,12 @@ def copyWav(dest: wave.Wave_write, src):
         dest.writeframes(packed_value)
 
 
+def copyWav2(dest: wave.Wave_write, src):
+    for i in src:
+        packed_value = struct.pack('<hh', np.int16(i[0]), np.int16(i[1]))
+        dest.writeframes(packed_value)
+
+
 def getWavStr(file_dir, mode):
     try:
         source = wave.open(file_dir, mode)
@@ -52,16 +58,14 @@ def getWavStr(file_dir, mode):
 
 
 def wav2str(input_sound: wave.Wave_read):
-    try:
-        source_signal = input_sound.readframes(-1)
+    source_signal = input_sound.readframes(-1)
+
+    if input_sound.getnchannels() == 1:
         source_signal = np.fromstring(source_signal, 'Int16')
-        return source_signal
-    except ConnectionError as e:
-        print(e)
-    except FileExistsError as e:
-        print(e)
-    except FileNotFoundError as e:
-        print(e)
+    else:
+        source_signal = np.fromstring(source_signal, 'Int16')
+        source_signal = np.array(np.reshape(source_signal, (input_sound.getnframes(), 2)))
+    return source_signal
 
 
 def stereo2str(input: wave.Wave_read):
@@ -83,3 +87,7 @@ def decVolume(wav_path):
     src = AudioSegment.from_wav(file_DIR + wav_path + '.wav')
     src = src - 10
     src.export(file_DIR + wav_path + '_dec' + 'wav', format='wav')
+
+
+def synthesize(src1: np.array, src2: np.array):
+    return src1 + src2

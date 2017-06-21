@@ -9,16 +9,20 @@ file_type = '.wav'
 # path of files (.wav)
 
 input_name = 'Fe_sp_1'
-output_name = 'primary_output'
+output_name = 'primary_example'
 hl_name = 'L0e' + '00' + '0a'
 hr_name = 'R0e' + '00' + '0a'
 noi_name = 'W2'
+primary_name = 'ret_primary'
+ambient_name = 'ret_ambient'
 
 input_path = file_DIR + input_name + '.wav'
 output_path = file_DIR + output_name + '.wav'
 hl_path = file_DIR + hl_name + '.wav'
 hr_path = file_DIR + hr_name + '.wav'
 noi_path = file_DIR + noi_name + '.wav'
+primary_path = file_DIR + primary_name + '.wav'
+ambient_path = file_DIR + ambient_name + '.wav'
 
 # open source file and get params
 
@@ -97,21 +101,16 @@ Nlest = zeros((N, 1))
 Nrest = zeros((N, 1))
 
 OutVec = empty(0)
+OutVecNoi = empty((lenSource,2))
 
 for i in range(frame):
     subSignal = source2[i * N: (i + 1) * N, :]
-    print(i)
+    # print(i)
     XVL = fftpack.rfft(subSignal[:, 0])
     XVR = fftpack.rfft(subSignal[:, 1])
     # TV = fftpack.rfft(subSignal)
     # print(shape(np.vstack((xp, subSignal))))
     xp = subSignal
-
-    # XL = np.transpose(np.vstack((XV[:N, 0], XL[:, 0])))
-    # XR = np.transpose(np.vstack((XV[:N, 1], XR[:, 0])))
-
-    # XL = np.transpose(XV[:N, 0])
-    # XR = np.transpose(XV[:N, 1])
 
     for k in range(N):
         subIn = vstack((XVL[k], XVR[k]))
@@ -139,8 +138,8 @@ for i in range(frame):
         # estimate primary source
         # Sest[k] = (XVL[k] + XVR[k]) / 2
         Sest[k] = pan[0] * XVL[k] + pan[1] * XVR[k]
-        scaling = sqrt((max_eig - min_eig) / (min_eig + init))
-        Sest[k] = Sest[k] * scaling
+        # scaling = sqrt((max_eig - min_eig) / (min_eig + init))
+        # Sest[k] = Sest[k] * scaling
 
         # estimate ambient source
 
@@ -154,6 +153,7 @@ for i in range(frame):
     ConjVec = np.append(XVL[:N], XVL[N - 1::-1])
     # ConjVec = np.append(Sest, Sest[::-1])
 
+    # print(Nlest, Nrest)
     # print(shape(ConjVec))
 
     xout = fftpack.irfft(Sest)
@@ -168,15 +168,28 @@ for i in range(frame):
     # xout_pre = xout[N:]
 
     OutVec = append(OutVec, xout)
+    OutVecNoi[i * N: (i + 1) * N, :] = hstack((Nrest, Nlest))
+    # print(shape(hstack((Nrest, Nlest))))
+    # print(hstack((Nrest, Nlest)))
+
     # print(OutVec)
 
 print('process end : copy start')
-ext_primary = OutVec[N + 1:]
-print(ext_primary)
-output = wave.open(output_path, 'w')
-output.setparams((2, sampWidth, FrameRate, nFrames, 'NONE', 'not compressed'))
+ext_primary = OutVec
+ext_ambient = real(OutVecNoi)
+print(OutVecNoi)
 
-copyWav2(output, source2)
+ret_primary = wave.open(primary_path, 'w')
+ret_primary.setparams((1, sampWidth, FrameRate, nFrames, 'NONE', 'not compressed'))
+
+copyWav(ret_primary, ext_primary)
+
+
+ret_ambient = wave.open(ambient_path, 'w')
+ret_ambient.setparams((2, sampWidth, FrameRate, nFrames, 'NONE', 'not compressed'))
+
+copyWav2(ret_ambient, ext_ambient)
 
 input.close()
-output.close()
+ret_primary.close()
+ret_ambient.close()
