@@ -5,7 +5,7 @@ reference - http://smcnetwork.org/system/files/SMC2016_submission_36.pdf
 
 ## main algorithm
 
-![alt text](blob:https://www.facebook.com/4fb65f15-490f-4883-910d-b590ca431d18)
+![alt text](https://scontent-hkg3-1.xx.fbcdn.net/v/t1.0-9/19642333_1584742551555972_2460613194975633821_n.jpg?oh=afd9f8a9b684c690d4a66f1d930f246f&oe=59DA5B4B)
 
 ```python
 
