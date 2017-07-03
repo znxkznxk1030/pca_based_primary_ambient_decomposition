@@ -1,9 +1,11 @@
 # pca_based_primary_ambient_decomposition
-주 요소, 주변 요소 분리
+- 주 요소, 주변 요소 분리
 
 reference - http://smcnetwork.org/system/files/SMC2016_submission_36.pdf
 
 ## main algorithm
+
+![alt text](https://scontent-hkg3-1.xx.fbcdn.net/v/t31.0-8/s960x960/19620475_1584770851553142_1071538089471735777_o.jpg?oh=07db6a8fd5c7014cf3e39d133f7d10bb&oe=59D2F442)
 
 ![alt text](https://scontent-hkg3-1.xx.fbcdn.net/v/t1.0-9/19642333_1584742551555972_2460613194975633821_n.jpg?oh=afd9f8a9b684c690d4a66f1d930f246f&oe=59DA5B4B)
 
